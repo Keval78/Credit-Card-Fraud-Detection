@@ -1,4 +1,15 @@
 pandas
 numpy
+scipy
 seaborn
--e .
+matplotlib
+imblearn
+scikit-learn
+xgboost
+dill
+Flask
+streamlit
+plotly
+numerize
+# sasl thrift thrift-sasl PyHive
+# -e .

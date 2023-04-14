@@ -109,7 +109,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-artifacts/
+artifacts/*.csv
+artifacts/models/
 notebook/data/
 
 # Spyder project settings

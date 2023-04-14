@@ -51,9 +51,9 @@ class DataIngestion:
             train_set, test_set = train_test_split(
                 df, test_size=0.2, stratify=df["Class"], random_state=1)
             
-            #Remove for all data training...
-            _, train_set = train_test_split(
-                train_set, test_size=0.2, stratify=train_set["Class"], random_state=1)
+            # #Remove for all data training...
+            # _, train_set = train_test_split(
+            #     train_set, test_size=0.1, stratify=train_set["Class"], random_state=1)
 
             train_set.to_csv(
                 self.ingestion_config.train_data_path, index=False, header=True)

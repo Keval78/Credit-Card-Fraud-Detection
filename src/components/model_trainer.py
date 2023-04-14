@@ -16,6 +16,13 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 
+from plotly import (
+    graph_objs as go,
+    express as px,
+    figure_factory as ff
+)
+from plotly.subplots import make_subplots
+
 from sklearn.model_selection import (
     train_test_split, 
     GridSearchCV, 
@@ -98,53 +105,93 @@ class ModelTrainer:
 
     def model_evaluation(self, models, X_test, y_test):
         # Defining number of columns
+        class_, empty_class_ = ["Non-Fraud", "Fraud"], ["         ", "     "]
+        # Defining number of columns
         n_cols, n_models = 3, len(models)
         n_rows = math.ceil(n_models/n_cols)
-        fig, ax = plt.subplots(n_rows, n_cols, figsize=(21, 7*n_rows))
-        i, j = 0, 0
+        
+        fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=tuple(map(lambda x: f"<b>{x}</b>", models.keys())), vertical_spacing=0.1, horizontal_spacing=0.01)
+        rows, cols, k = 1, 1, 1
         for model in models:
-            y_pred = models[model]['output'].predict(X_test)
+            y_pred = models[model]['output'].predict(X_test) # models[model]['predicitions']
             cm = confusion_matrix(y_test, y_pred)
 
-            disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-            disp = disp.plot(include_values=True, cmap='Blues', ax=ax[i, j])
-            disp.ax_.set_title('Confusion Matrix')
-
-            # Generate report
             report = classification_report(y_test, y_pred)
+            
+            fig.add_trace(go.Heatmap(
+                x=class_, y=class_ if cols==1 else empty_class_, z=cm, 
+                colorscale='Greys', text = [["Non-Fraud"]*2,["Fraud"]*2], 
+                zmin=0, zmax=100, hovertemplate = "True Class: %{text}<br>Predicted Class: %{x}<br>Count: %{z}",
+                showscale=False), row=rows, col=cols)
 
-            ax[i, j].axis('off')
-            ax[i, j].set_title(f'{model} Classification Report')
-            ax[i, j].annotate(report, xy=(0.1, 0), xytext=(0, -10), xycoords='axes fraction', textcoords='offset pixels', va='top')
+            # Add annotations to first heatmap
+            for i in range(len(class_)):
+                for j in range(len(class_)):
+                    color = "Black" if cm[j, i]<50 else "White"
+                    fig.add_annotation(x=class_[i], y=class_[j] if cols==1 else empty_class_[j], text=f"<b>{cm[j, i]}<b>", font=dict(color=color, size=14), showarrow=False, xref=f"x{k}", yref=f"y{k}")
 
-            if j==n_cols-1: j, i = 0, i+1
-            else: j+=1
+            fig.add_annotation(
+                x=.5, y=-1.1,
+                text="<b>"+report.split("accuracy")[0].replace("\n","<br>")+"</b>",
+                font=dict(color='black', size=14),
+                showarrow=False,
+                xref=f"x{k}", yref=f"y{k}"
+            )
 
-        plt.subplots_adjust(hspace=0.5)
-        plt.savefig(os.path.join('artifacts', "ConfusionMatrix.png"))
+            if cols==n_cols: cols, rows = 1, rows+1
+            else: cols+=1
+            k+=1
+
+        fig.update_layout(title_text='<b>Confusion Matrices for each Machine Learning Model</b>', font=dict(size=16), height=1000, width=1400, showlegend=False)
+        fig['data'][0]['showscale'] = True
+        
+        # create_and_download_obj("ConfusionMatrix", fig)
+        save_object(
+            file_path = os.path.join ('artifacts', 'charts', 'ConfusionMatrix'),
+            obj = fig
+        )
+        # fig.show()
+        # plt.savefig(os.path.join('artifacts', 'models',  "ConfusionMatrix.png"))
         # plt.show()
     
     def roc_curves(self, models, X_test, y_test):
         #ROC Curve
-        plt.figure(figsize=(16,8))
-        plt.title('ROC Curve \n Top 4 Classifiers', fontsize=18)
+        fig = go.Figure()
+        fig.add_shape(type='line', line=dict(dash='dash'), x0=0, x1=1, y0=0, y1=1)
+
         for model in models:
             if hasattr(models[model]['output'],'decision_function'):
-                probs=models[model]['output'].decision_function(X_test) 
+                probs=models[model]['output'].decision_function(X_test)
             elif hasattr(models[model]['output'],'predict_proba'):
                 probs=models[model]['output'].predict_proba(X_test) [:,1]
-            log_fpr, log_tpr, log_thresold = roc_curve(y_test, probs)
-            roc_auc_scor = roc_auc_score(y_test, probs)
-            plt.plot(log_fpr, log_tpr, label='{} Score: {:.4f}'.format(model, roc_auc_scor))
-            logging.info('ROC-AUC value for {} {:.4f}'.format(model, roc_auc_scor))
-        plt.plot([0, 1], [0, 1], 'k--')
-        plt.axis([-0.01, 1, 0, 1])
-        plt.xlabel('False Positive Rate', fontsize=16)
-        plt.ylabel('True Positive Rate', fontsize=16)
-        plt.annotate('Minimum ROC Score of 50% \n (This is the minimum score to get)', xy=(0.5, 0.5), xytext=(0.6, 0.3), arrowprops=dict(facecolor='#6E726D', shrink=0.05))
-        plt.legend()
-        plt.savefig(os.path.join('artifacts', "ROCAUC.png"))
-        # plt.show()
+            fpr, tpr, log_thresold = roc_curve(y_test, probs)
+            auc_score = roc_auc_score(y_test, probs)
+
+            name = f"<b>{model} (AUC={auc_score:.5f})</b>"
+            fig.add_trace(go.Scatter(x=fpr, y=tpr, name=name, mode='lines'))
+        
+        fig.update_layout(
+            xaxis_title='False Positive Rate',
+            yaxis_title='True Positive Rate',
+            yaxis=dict(scaleanchor="x", scaleratio=1),
+            xaxis=dict(constrain='domain'),
+            width=1200, height=1000,
+            legend=dict(
+                x=0.53,
+                y=0.05,
+                traceorder='normal',
+                font=dict(family='sans-serif', size=15),
+                bgcolor='White',
+                bordercolor='Black',
+                borderwidth=1,
+                orientation="v"
+            )
+        )
+        
+        save_object(
+            file_path = os.path.join ('artifacts', 'charts', 'ROCcurve'),
+            obj = fig
+        )
 
     def initiate_model_trainer(self, train_array, test_array):
         try:
@@ -174,7 +221,7 @@ class ModelTrainer:
                 save_object (
                     file_path = os.path.join (
                         self.model_trainer_config.trained_models_folder_path,
-                        '{}.pkl'.format(model)
+                        '{}'.format(model)
                     ),
                     obj = models[model]['output']
                 )
